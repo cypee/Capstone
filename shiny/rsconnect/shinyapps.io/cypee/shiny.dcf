@@ -1,0 +1,9 @@
+name: shiny
+account: cypee
+server: shinyapps.io
+appId: 104941
+bundleId: 465171
+url: https://cypee.shinyapps.io/shiny/
+when: 1464464959.27756
+asMultiple: FALSE
+asStatic: FALSE

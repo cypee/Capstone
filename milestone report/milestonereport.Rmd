@@ -1,0 +1,174 @@
+---
+title: "Data Science Capstone Milestone Report"
+author: "CYPEE"
+date: "April 27, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(results= FALSE)
+```
+
+## Introduction
+This report aims to provides a preliminary study on data provided by SwifKey. The data consists of three text files obtained from three different sources i.e. blogs, news and twitter. The data can be downloaded from the <a href="https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip">Capstone Dataset.</a></p>
+
+## Download and Data Extraction
+The <a href="https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip">Capstone Dataset.</a> is downloaded and extracted to current working folder
+
+```{r, message=FALSE, warning=FALSE}
+if (!file.exists("Coursera-SwiftKey.zip")) {
+  download.file("https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip", 'Coursera-SwiftKey.zip')
+  unzip("Coursera-SwiftKey.zip")
+}
+```
+The data sets provided are from three different sources: 1) News, 2) Blogs and 3) Twitter Feeds. The text data are provided in four different languages: 1) German, 2) English - United States, 3) Finnish and 4) Russian. In this project, we will focus only on the English - United States data sets. The data set is converted from UTF-8 format to ASCII.
+
+```{r, message=FALSE, warning=FALSE}
+twitter <- readLines("./final/en_US/en_US.twitter.txt", encoding = "UTF-8", skipNul = TRUE)
+blogs <- readLines("./final/en_US/en_US.blogs.txt", encoding = "UTF-8", skipNul = TRUE)
+news <- readLines("./final/en_US/en_US.news.txt", encoding = "UTF-8", skipNul = TRUE)
+
+# Convert UTF-8 to ASCII
+twitter <- iconv(twitter, 'UTF-8', 'ASCII', "byte")
+blogs <- iconv(blogs, 'UTF-8', 'ASCII', "byte")
+news <- iconv(news, 'UTF-8', 'ASCII', "byte")
+```
+We examined the data sets and summarize our findings as follows.
+
+```{r, message=FALSE, warning=FALSE}
+library(stringi)
+
+# Get file size in MB
+blogs_size <- file.info("./final/en_US/en_US.blogs.txt")$size / (1024 ^ 2)
+news_size <- file.info("./final/en_US/en_US.news.txt")$size / (1024 ^ 2)
+twitter_size <- file.info("./final/en_US/en_US.twitter.txt")$size / (1024 ^ 2)
+
+# Nos of words  in files
+blogs_words <- stri_count_words(blogs)
+news_words <- stri_count_words(news)
+twitter_words <- stri_count_words(twitter)
+
+# Summary of the data sets
+data.frame(source = c("blogs", "news", "twitter"),
+           file.size.MB = c(blogs_size, news_size, twitter_size),
+           num.lines = c(length(blogs), length(news), length(twitter)),
+           num.words = c(sum(blogs_words), sum(news_words), sum(twitter_words)),
+           mean.num.words = c(mean(blogs_words), mean(news_words), mean(twitter_words)))
+```
+
+## Data Cleaning
+Before exploratory data analysis, we need to clean the data. This process including removal of URLs, numbers, special characters, punctuations, stopwords, excess whitespace, and changing the text to lower case. Due to the data sets are large, we will randomly choose only one percent of the data to demonstrate the processes of data cleaning and  analysis.
+
+```{r,message=FALSE, warning=FALSE}
+library(tm)
+# Sample the data
+set.seed(123)
+data_sample <- c(sample(blogs, length(blogs) * 0.01),
+                 sample(news, length(news) * 0.01),
+                 sample(twitter, length(twitter) * 0.01))
+
+# Create corpus and clean the data
+corpus <- VCorpus(VectorSource(data_sample))
+toSpace <- content_transformer(function(x, pattern) gsub(pattern, " ", x))
+corpus <- tm_map(corpus, toSpace, "(f|ht)tp(s?)://(.*)[.][a-z]+")
+corpus <- tm_map(corpus, toSpace, "@[^\\s]+")
+corpus <- tm_map(corpus, tolower)
+corpus <- tm_map(corpus, removeWords, stopwords("en"))
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, stripWhitespace)
+corpus <- tm_map(corpus, PlainTextDocument)
+
+#save(corpus,file="sampleCorpus.RData")
+rm(blogs)
+rm(news)
+rm(twitter)
+```
+
+## Exploratory Data Analysis
+
+We can now perform exploratory data analysis on the sample data. We will first study the data samples based on model of n-gram. Three most commonly used n-gram model will be studied i.e. unigram, bigram and and trigram. The term document matrix objects for n-grams of data sample are computed as follows 
+```{r,message=FALSE, warning=FALSE}
+library(RWeka)
+library(wordcloud)
+library(ggplot2)
+
+#load("sampleCorpus.RData")
+# n-grams of data sample
+unigram_token <- function(x) NGramTokenizer(x, Weka_control(min = 1, max = 1))
+bigram_token <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+trigram_token <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
+
+# compute tdm for unigram,bigram and trigram
+unigram <- TermDocumentMatrix(corpus, control = list(tokenize = unigram_token))
+bigram <- TermDocumentMatrix(corpus, control = list(tokenize = bigram_token))
+trigram <- TermDocumentMatrix(corpus, control = list(tokenize = trigram_token))
+```
+
+This followed by function that  display word cloud from term document matrix objects.
+```{r, message=FALSE, warning=FALSE}
+# function displaying wordcloud from tdm
+displayWordCloud<- function(tdm, sparce)
+{
+    tdm <- removeSparseTerms(tdm, sparce)
+    tdm.m <- as.matrix(tdm)
+    freq <- sort(rowSums(tdm.m),decreasing=TRUE)
+    freq.df <- data.frame(word = names(freq),freq=freq)
+    wordcloud(freq.df$word, freq.df$freq, random.order=FALSE,
+              colors=brewer.pal(8, "Dark2"))
+}
+```
+
+We first display word cloud for uni-gram of data sample
+```{r,message=FALSE, warning=FALSE}
+# Display Word cloud for n-grams of data sample
+displayWordCloud(unigram, 0.99)
+```
+
+This followed by word cloud for bi-gram of data sample
+```{r,message=FALSE, warning=FALSE}
+# Display Word cloud for n-grams of data sample
+displayWordCloud(bigram, 0.999)
+```
+
+And the word cloud for tri-gram of data sample
+```{r,message=FALSE, warning=FALSE}
+displayWordCloud(trigram, 0.9999)
+```
+
+It would be helpful to visualize the frequencies of those most frequently occurred patterns in the n-gram models. For that the following function is created to plot histogram from term document matrix objects.
+```{r,message=FALSE, warning=FALSE}
+plottdm <- function(tdm, n, label1)
+{
+    tdm.red <- removeSparseTerms(tdm, 0.9999)
+    freq <- sort(rowSums(as.matrix(tdm.red)), decreasing = TRUE)
+    freq.df <- data.frame(word = names(freq), freq = freq)
+    ggplot(freq.df[1:n,], aes(reorder(word, -freq), freq)) +
+         labs(x = label1, y = "Frequency") +
+         theme(axis.text.x = element_text(angle = 60, size = 12, hjust = 1)) +
+         geom_bar(stat = "identity", fill = I("grey50"))
+}
+```
+
+Here is a histogram of the 20 most common uni-gram of data sample.
+```{r, message=FALSE, warning=FALSE}
+plottdm(unigram, 20, "20 Most Common Unigrams")
+```
+
+The histogram of the 20 most common bi-gram of data sample is as follows
+```{r, message=FALSE, warning=FALSE}
+plottdm(bigram, 20, "20 Most Common Bigrams")
+```
+
+The histogram of the 20 most common tri-gram of data sample.
+```{r, message=FALSE, warning=FALSE}
+plottdm(trigram, 20, "20 Most Common Trigrams")
+```
+
+## The Next Steps...
+
+The next steps of this capstone project would be to create our predictive algorithm, and deploy the algorithm as a Shiny app.
+
+Our predictive algorithm will be based on n-gram model with frequency lookup similar to our exploratory analysis above. One possible strategy would be to use the trigram model to predict the next word. If no matching trigram can be found, then the algorithm would back off to the bigram model, and then to the unigram model if needed.
+
